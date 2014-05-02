@@ -1,1 +1,26 @@
-["redis-brain.coffee", "shipit.coffee", "darksky.coffee", "days_since.coffee", "dealwithit.coffee", "decide.coffee", "do-it-live.coffee", "giphy.coffee", "hubotagainsthumanity.coffee"]
+[
+  "redis-brain.coffee",
+  "shipit.coffee",
+  "darksky.coffee",
+  "days_since.coffee",
+  "dealwithit.coffee",
+  "decide.coffee",
+  "do-it-live.coffee",
+  "giphy.coffee",
+  "hubotagainsthumanity.coffee",
+  "trollicon.coffee",
+  "thanks-obama.coffee",
+  "script.coffee",
+  "ruby.coffee",
+  "wikipedia.coffee",
+  "romanemperor.coffee",
+  "remind.coffee",
+  "polite.coffee",
+  "plusplus.coffee",
+  "mtg.coffee",
+  "mindkiller.coffee",
+  "animal.coffee",
+  "botsnack.coffee",
+  "buscemi.coffee",
+  "cheer.coffee"
+]
