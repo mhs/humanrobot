@@ -15,6 +15,7 @@
 #   ross-hunter
 
 moment = require 'moment'
+Util = require 'util'
 
 class Reminders
   constructor: (@robot) ->
@@ -45,7 +46,7 @@ class Reminders
       if @cache.length > 0
         trigger = =>
           reminder = @removeFirst()
-          @robot.messageRoom 'main', "@everyone it's time to " + reminder.action
+          @robot.send room: reminder.msg_envelope.room, "#{reminder.msg_envelope.room} @everyone it's time to " + reminder.action
           if reminder.repeat != "none"
             reminder.nextRepeat()
             @add reminder
