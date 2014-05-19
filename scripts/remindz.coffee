@@ -8,14 +8,13 @@
 #   None
 #
 # Commands:
-#   hubot remind me at/on <time> to <action> repeat <repeat>
+#   hubot remind me at/on <time> to <action> repeat <repeat> (weekly, daily, none)
+#   hubot stop all reminders
 #
 # Author:
 #   ross-hunter
 
 moment = require 'moment'
-# Util = require 'util'
-
 
 class Reminders
   constructor: (@robot) ->
@@ -28,8 +27,6 @@ class Reminders
         @queue()
 
   add: (reminder) ->
-    # @robot.reply reminder.msg_envelope, "Add"
-    # @robot.reply reminder.msg_envelope, "#{Util.inspect(reminder)}"
     @cache.push reminder
     @cache.sort (a, b) -> a.time - b.time
     @robot.brain.data.reminders = @cache
@@ -37,8 +34,6 @@ class Reminders
 
   removeFirst: ->
     reminder = @cache.shift()
-    # @robot.reply reminder.msg_envelope, "Remove"
-    # @robot.reply reminder.msg_envelope, "#{Util.inspect(reminder)}"
     @robot.brain.data.reminders = @cache
     reminder
 
@@ -50,7 +45,7 @@ class Reminders
       if @cache.length > 0
         trigger = =>
           reminder = @removeFirst()
-          @robot.reply reminder.msg_envelope, 'you asked me to remind you to ' + reminder.action + ' on ' + reminder.dueDate() + ' and repeat ' + reminder.repeat
+          @robot.messageRoom 'main', "@everyone it's time to " + reminder.action
           if reminder.repeat != "none"
             reminder.nextRepeat()
             @add reminder
@@ -75,7 +70,11 @@ class Reminder
 
   nextRepeat: ->
     if @repeat == "daily"
-      @time = moment(@time).add('days', 1).toDate()
+      if moment(@time).weekday() == 5 # Friday
+        days = 3 # Monday
+      else
+        days = 1
+      @time = moment(@time).add('days', days).toDate()
     else if @repeat == "weekly"
       @time = moment(@time).add('weeks', 1).toDate()
     else if @repeat == "minutely"
@@ -90,7 +89,7 @@ module.exports = (robot) ->
     action = msg.match[3]
     repeat = msg.match[4]
     time = new Date(msg.match[2])
-    # if you don't give a year you will get 2001. This defaults year to this one
+    # if you don't give a year, default to current year
     time = moment(time).year(moment().year()).toDate() if moment(time).year() < moment().year()
     reminder = new Reminder msg.envelope, time, action, repeat
     reminders.add reminder
