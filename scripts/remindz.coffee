@@ -95,3 +95,7 @@ module.exports = (robot) ->
     reminder = new Reminder msg.envelope, time, action, repeat
     reminders.add reminder
     msg.send 'I\'ll remind you to ' + action + ' on ' + reminder.dueDate() + ' and repeat ' + repeat
+
+  robot.respond /stop all reminders/i, (msg) ->
+    @robot.brain.data.reminders = []
+    msg.send "OK, I'll stop"
