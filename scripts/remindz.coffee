@@ -101,9 +101,9 @@ module.exports = (robot) ->
 
   reminders = new Reminders robot
 
-  robot.respond /remind (.*) (at|on) (.*) to (.*)( and)?( repeat )?(daily|weekly|minutely)?/i, (msg) ->
+  robot.respond /remind (.*) (at|on) (.*) to (.*)/i, (msg) ->
 
-    if msg.match[1] = "me"
+    if msg.match[1] == "me"
       subject = "@#{msg.envelope.user.name}"
     else
       subject = "@#{msg.match[1]}"
@@ -114,8 +114,13 @@ module.exports = (robot) ->
     else
       time = new Date(msg.match[3])
 
-    action = msg.match[4]
-    repeat = msg.match[6]
+    parsed_action = msg.match[4].match /(.*) and repeat (.*)/i
+
+    if parsed_action
+      repeat = parsed_action[2]
+      action = parsed_action[1]
+    else
+      action = msg.match[4]
 
     room = msg.envelope.room
     user = msg.envelope.user
@@ -125,9 +130,11 @@ module.exports = (robot) ->
 
     msg.send "I\'ll remind #{subject} to #{action} on #{reminder.dueDate()} and repeat #{repeat}"
 
+
   robot.respond /(stop|clear|kill|remove)( all)? reminders/i, (msg) ->
     @robot.brain.data.reminders = []
     msg.send "OK, I'll stop"
+
 
   robot.respond /(list|show)( me)?( all)? reminders/i, (msg) ->
     response = "OK, here are the reminders \n"
