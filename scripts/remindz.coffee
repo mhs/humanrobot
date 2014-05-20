@@ -94,7 +94,7 @@ class Reminder
       @time = moment(@time).add('minutes', 1).toDate()
 
   text: ->
-    "#{@subject} it's time to " + @action
+    "#{@subject} it's time to #{@action}"
 
 
 module.exports = (robot) ->
@@ -132,13 +132,19 @@ module.exports = (robot) ->
 
 
   robot.respond /(stop|clear|kill|remove)( all)? reminders/i, (msg) ->
-    @robot.brain.data.reminders = []
+    reminders.cache = []
+
     msg.send "OK, I'll stop"
+
+
+  robot.respond /(stop|clear|kill|remove) reminder (\d)/i, (msg) ->
+    msg.send "OK, I will remove [#{reminders.cache[parseInt(msg.match[2]) - 1].text()}]"
+    reminders.cache.splice(parseInt(msg.match[2]) - 1, 1)
 
 
   robot.respond /(list|show)( me)?( all)? reminders/i, (msg) ->
     response = "OK, here are the reminders \n"
-    for reminder in @robot.brain.data.reminders
-      response += "#{reminder.text()} #{reminder.dueDate()} \n"
+    for reminder in reminders.cache
+      response += "#{reminder.text()} #{reminder.dueDate()} #{reminder.repeat} \n"
 
     msg.send response
