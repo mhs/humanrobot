@@ -46,8 +46,8 @@ class Reminders
       if @cache.length > 0
         trigger = =>
           reminder = @removeFirst()
-          @robot.send room: reminder.msg_envelope.room, "#{reminder.msg_envelope.room} @everyone it's time to " + reminder.action
-          if reminder.repeat != "none"
+          reminder.send(@robot)
+          if reminder.repeat
             reminder.nextRepeat()
             @add reminder
           else
@@ -64,7 +64,19 @@ class Reminders
         extendTimeout @cache[0].time - now, trigger
 
 class Reminder
-  constructor: (@msg_envelope, @time, @action, @repeat) ->
+  constructor: (params) ->
+    @room = params.room
+    @user = params.user
+    @subject = params.subject
+    @time = params.time
+    @action = params.action
+    @repeat = params.repeat
+
+  send: (robot) ->
+    if @room
+      robot.send({room: @room}, @text())
+    else if @user
+      robot.send({user: @user}, @text())
 
   dueDate: ->
     @time.toLocaleString()
@@ -81,21 +93,45 @@ class Reminder
     else if @repeat == "minutely"
       @time = moment(@time).add('minutes', 1).toDate()
 
+  text: ->
+    "#{@subject} it's time to " + @action
+
 
 module.exports = (robot) ->
 
   reminders = new Reminders robot
 
-  robot.respond /remind me (at|on) (.*) to (.*) repeat (none|daily|weekly|minutely)/i, (msg) ->
-    action = msg.match[3]
-    repeat = msg.match[4]
-    time = new Date(msg.match[2])
-    # if you don't give a year, default to current year
-    time = moment(time).year(moment().year()).toDate() if moment(time).year() < moment().year()
-    reminder = new Reminder msg.envelope, time, action, repeat
-    reminders.add reminder
-    msg.send 'I\'ll remind you to ' + action + ' on ' + reminder.dueDate() + ' and repeat ' + repeat
+  robot.respond /remind (.*) (at|on) (.*) to (.*)( repeat )?(none|daily|weekly|minutely)?/i, (msg) ->
 
-  robot.respond /stop all reminders/i, (msg) ->
+    if msg.match[1] = "me"
+      subject = "@#{msg.envelope.user.name}"
+    else
+      subject = "@#{msg.match[1]}"
+
+    # if you don't give a year, default to current year
+    if moment(new Date(msg.match[3])).year() < moment().year()
+      time = moment(new Date(msg.match[3])).year(moment().year()).toDate()
+    else
+      time = new Date(msg.match[3])
+
+    action = msg.match[4]
+    repeat = msg.match[5]
+
+    room = msg.envelope.room
+    user = msg.envelope.user
+
+    reminder = new Reminder {room: room, user: user, subject: subject, time: time, action: action, repeat: repeat}
+    reminders.add reminder
+
+    msg.send "I\'ll remind #{subject} to #{action} on #{reminder.dueDate()} and repeat #{repeat}"
+
+  robot.respond /(stop|clear|kill|remove)( all)? reminders/i, (msg) ->
     @robot.brain.data.reminders = []
     msg.send "OK, I'll stop"
+
+  robot.respond /(list|show)( me)?( all)? reminders/i, (msg) ->
+    response = "OK, here are the reminders \n"
+    for reminder in @robot.brain.data.reminders
+      response += "#{reminder.text()} #{reminder.dueDate()} \n"
+
+    msg.send response
