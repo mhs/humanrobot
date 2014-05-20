@@ -101,7 +101,7 @@ module.exports = (robot) ->
 
   reminders = new Reminders robot
 
-  robot.respond /remind (.*) (at|on) (.*) to (.*)( repeat )?(none|daily|weekly|minutely)?/i, (msg) ->
+  robot.respond /remind (.*) (at|on) (.*) to (.*)( and)?( repeat )?(daily|weekly|minutely)?/i, (msg) ->
 
     if msg.match[1] = "me"
       subject = "@#{msg.envelope.user.name}"
@@ -115,7 +115,7 @@ module.exports = (robot) ->
       time = new Date(msg.match[3])
 
     action = msg.match[4]
-    repeat = msg.match[5]
+    repeat = msg.match[6]
 
     room = msg.envelope.room
     user = msg.envelope.user
