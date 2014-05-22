@@ -158,6 +158,8 @@ module.exports = (robot) ->
   robot.respond /(stop|clear|kill|remove) reminder (\d)/i, (msg) ->
     msg.send "OK, I will remove [#{reminders.cache[parseInt(msg.match[2]) - 1].text()}]"
     reminders.cache.splice(parseInt(msg.match[2]) - 1, 1)
+    robot.brain.data.reminders = reminders.cache
+    robot.brain.emit('save', robot.brain.data.reminders)
 
 
   robot.respond /(list|show)( me)?( all)? reminders/i, (msg) ->
