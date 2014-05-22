@@ -103,7 +103,7 @@ class Reminder
       next_date = moment(@date).add('minutes', 1)
 
     if next_date.isAfter()
-      @date = next_date
+      @date = next_date.toDate()
     else
       # Ensure the date is in the future, punting for now
 
