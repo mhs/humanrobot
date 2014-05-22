@@ -16,6 +16,7 @@
 
 moment = require 'moment'
 Util = require 'util'
+_ = require 'underscore'
 
 class Reminders
   constructor: (@robot) ->
@@ -23,52 +24,57 @@ class Reminders
     @current_timeout = null
 
     @robot.brain.on 'loaded', =>
-      if @robot.brain.data.reminders
-        @cache = @robot.brain.data.reminders
-        @queue()
+      @robot.brain.data.reminders ||= []
+      _.each @robot.brain.data.reminders, (reminder) =>
+        @cache.push new Reminder reminder
+
+      @queue()
 
   add: (reminder) ->
     @cache.push reminder
-    @cache.sort (a, b) -> a.time - b.time
+    @cache.sort (a, b) -> a.time() - b.time()
     @robot.brain.data.reminders = @cache
+    @robot.brain.emit('save', @robot.brain.data.reminders)
     @queue()
 
   removeFirst: ->
     reminder = @cache.shift()
     @robot.brain.data.reminders = @cache
+    @robot.brain.emit('save', @robot.brain.data.reminders)
     reminder
 
   queue: ->
     clearTimeout @current_timeout if @current_timeout
     if @cache.length > 0
-      now = new Date().getTime()
-      @removeFirst() until @cache.length is 0 or @cache[0].time > now
-      if @cache.length > 0
-        trigger = =>
-          reminder = @removeFirst()
-          reminder.send(@robot)
-          if reminder.repeat
-            reminder.nextRepeat()
-            @add reminder
-          else
-            @queue()
-        # setTimeout uses a 32-bit INT
-        extendTimeout = (timeout, callback) ->
-          if timeout > 0x7FFFFFFF
-            @current_timeout = setTimeout ->
-              extendTimeout (timeout - 0x7FFFFFFF), callback
-            , 0x7FFFFFFF
-          else
-            @current_timeout = setTimeout callback, timeout
+      trigger = =>
+        reminder = @removeFirst()
+        reminder.send(@robot)
+        if reminder.repeat
+          reminder.nextRepeat()
+          @add reminder
+        else
+          @queue()
+      # setTimeout uses a 32-bit INT
+      extendTimeout = (timeout, callback) ->
+        if timeout > 0x7FFFFFFF
+          @current_timeout = setTimeout ->
+            extendTimeout (timeout - 0x7FFFFFFF), callback
+          , 0x7FFFFFFF
+        else
+          @current_timeout = setTimeout callback, timeout
 
-        extendTimeout @cache[0].time - now, trigger
+      waitFor = @cache[0].time() - new Date().getTime()
+      if waitFor > 0
+        extendTimeout waitFor, trigger
+      else
+        trigger()
 
 class Reminder
   constructor: (params) ->
     @room = params.room
     @user = params.user
     @subject = params.subject
-    @time = params.time
+    @date = params.date
     @action = params.action
     @repeat = params.repeat
 
@@ -79,19 +85,27 @@ class Reminder
       robot.send({user: @user}, @text())
 
   dueDate: ->
-    @time.toLocaleString()
+    @date.toLocaleString()
+
+  time:->
+    new Date(@date).getTime()
 
   nextRepeat: ->
     if @repeat == "daily"
-      if moment(@time).weekday() == 5 # Friday
+      if moment(@date).weekday() == 5 # Friday
         days = 3 # Monday
       else
         days = 1
-      @time = moment(@time).add('days', days).toDate()
+      next_date = moment(@date).add('days', days)
     else if @repeat == "weekly"
-      @time = moment(@time).add('weeks', 1).toDate()
+      next_date = moment(@date).add('weeks', 1)
     else if @repeat == "minutely"
-      @time = moment(@time).add('minutes', 1).toDate()
+      next_date = moment(@date).add('minutes', 1)
+
+    if next_date.isAfter()
+      @date = next_date
+    else
+      # Ensure the date is in the future, punting for now
 
   text: ->
     "#{@subject} it's time to #{@action}"
@@ -110,9 +124,11 @@ module.exports = (robot) ->
 
     # if you don't give a year, default to current year
     if moment(new Date(msg.match[3])).year() < moment().year()
-      time = moment(new Date(msg.match[3])).year(moment().year()).toDate()
+      date = moment(new Date(msg.match[3])).year(moment().year()).toDate()
     else
-      time = new Date(msg.match[3])
+      date = new Date(msg.match[3])
+
+    return msg.send "LOL, NOT A REAL DATE" unless _.isFinite(date.getTime())
 
     parsed_action = msg.match[4].match /(.*) and repeat (.*)/i
 
@@ -125,7 +141,7 @@ module.exports = (robot) ->
     room = msg.envelope.room
     user = msg.envelope.user
 
-    reminder = new Reminder {room: room, user: user, subject: subject, time: time, action: action, repeat: repeat}
+    reminder = new Reminder {room: room, user: user, subject: subject, date: date, action: action, repeat: repeat}
     reminders.add reminder
 
     msg.send "I\'ll remind #{subject} to #{action} on #{reminder.dueDate()} and repeat #{repeat}"
@@ -133,6 +149,8 @@ module.exports = (robot) ->
 
   robot.respond /(stop|clear|kill|remove)( all)? reminders/i, (msg) ->
     reminders.cache = []
+    robot.brain.data.reminders = []
+    robot.brain.emit('save', robot.brain.data.reminders)
 
     msg.send "OK, I'll stop"
 
