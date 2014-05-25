@@ -2,21 +2,21 @@
 #   Alarm your people
 #
 # Dependencies:
-#   None
-#
+#   moment
+
 # Configuration:
 #   None
 #
 # Commands:
-#   hubot remind me at/on <time> to <action> repeat <repeat> (weekly, daily, none)
-#   hubot stop all reminders
+#   hubot remind <user> at|on <time> to <action> repeat <repeat> (weekly, daily, hourly)
+#   hubot remind <user> in <time> to <action> repeat <repeat> (weekly, daily, hourly)
+#   hubot stop|clear|kill|remove all reminders
+#   hubot stop|clear|kill|remove reminder <index>
 #
 # Author:
-#   ross-hunter
+#   ross-hunter, whitman
 
 moment = require 'moment'
-Util = require 'util'
-_ = require 'underscore'
 
 class Reminders
   constructor: (@robot) ->
@@ -25,7 +25,7 @@ class Reminders
 
     @robot.brain.on 'loaded', =>
       @robot.brain.data.reminders ||= []
-      _.each @robot.brain.data.reminders, (reminder) =>
+      for reminder in @robot.brain.data.reminders
         @cache.push new Reminder reminder
 
       @queue()
@@ -34,16 +34,15 @@ class Reminders
     @cache.push reminder
     @cache.sort (a, b) -> a.time() - b.time()
     @robot.brain.data.reminders = @cache
-    @robot.brain.emit('save', @robot.brain.data.reminders)
     @queue()
 
   removeFirst: ->
     reminder = @cache.shift()
     @robot.brain.data.reminders = @cache
-    @robot.brain.emit('save', @robot.brain.data.reminders)
     reminder
 
   queue: ->
+    @robot.brain.emit('save', @robot.brain.data.reminders)
     clearTimeout @current_timeout if @current_timeout
     if @cache.length > 0
       trigger = =>
@@ -84,11 +83,11 @@ class Reminder
     else if @user
       robot.send({user: @user}, @text())
 
-  dueDate: ->
-    @date.toLocaleString()
-
   time:->
     new Date(@date).getTime()
+
+  text: ->
+    "#{@subject} it's time to #{@action}. Repeat #{@repeat}"
 
   nextRepeat: ->
     if @repeat == "daily"
@@ -99,23 +98,22 @@ class Reminder
       next_date = moment(@date).add('days', days)
     else if @repeat == "weekly"
       next_date = moment(@date).add('weeks', 1)
+    else if @repeat == "hourly"
+      next_date = moment(@date).add('hours', 1)
     else if @repeat == "minutely"
       next_date = moment(@date).add('minutes', 1)
-
-    if next_date.isAfter()
-      @date = next_date.toDate()
     else
-      # Ensure the date is in the future, punting for now
+      return
 
-  text: ->
-    "#{@subject} it's time to #{@action}"
+    @date = next_date.toDate()
+    @nextRepeat() unless next_date.isAfter()
 
 
 module.exports = (robot) ->
 
   reminders = new Reminders robot
 
-  robot.respond /remind (.*) (at|on) (.*) to (.*)/i, (msg) ->
+  robot.respond /remind (.*) (at|on) (.*)( to | that )(.*)/i, (msg) ->
 
     if msg.match[1] == "me"
       subject = "@#{msg.envelope.user.name}"
@@ -128,15 +126,14 @@ module.exports = (robot) ->
     else
       date = new Date(msg.match[3])
 
-    return msg.send "LOL, NOT A REAL DATE" unless _.isFinite(date.getTime())
+    return msg.send "Hey, that's not a real date!" unless _.isFinite(date.getTime())
 
-    parsed_action = msg.match[4].match /(.*) and repeat (.*)/i
-
+    parsed_action = msg.match[5].match /(.*)( and repeat| repeat )(.*)/i
     if parsed_action
-      repeat = parsed_action[2]
+      repeat = parsed_action[3]
       action = parsed_action[1]
     else
-      action = msg.match[4]
+      action = msg.match[5]
 
     room = msg.envelope.room
     user = msg.envelope.user
@@ -144,7 +141,34 @@ module.exports = (robot) ->
     reminder = new Reminder {room: room, user: user, subject: subject, date: date, action: action, repeat: repeat}
     reminders.add reminder
 
-    msg.send "I\'ll remind #{subject} to #{action} on #{reminder.dueDate()} and repeat #{repeat}"
+    msg.send "I\'ll remind #{subject} to #{action} on #{reminder.date} and repeat #{@repeat}"
+
+
+  robot.respond /remind (.*) in (\d+) (\w+)( and )?(\d+)?( )?(\w+)?( to | that )(.*)/i, (msg) ->
+
+    if msg.match[1] == "me"
+      subject = "@#{msg.envelope.user.name}"
+    else
+      subject = "@#{msg.match[1]}"
+
+    parsed_action = msg.match[9].match /(.*)( and repeat| repeat )(.*)/i
+    if parsed_action
+      repeat = parsed_action[3]
+      action = parsed_action[1]
+    else
+      action = msg.match[9]
+
+    tmpDate = moment().add(msg.match[3], msg.match[2])
+    tmpDate = tmpDate.add(msg.match[7], msg.match[5]) if msg.match[5] && msg.match[7]
+
+    room = msg.envelope.room
+    user = msg.envelope.user
+    date = tmpDate.toDate()
+
+    reminder = new Reminder {room: room, user: user, subject: subject, date: date, action: action, repeat: repeat}
+    reminders.add reminder
+
+    msg.send "I\'ll remind #{subject} to #{action} on #{reminder.date} and repeat #{reminder.repeat}"
 
 
   robot.respond /(stop|clear|kill|remove)( all)? reminders/i, (msg) ->
@@ -152,11 +176,12 @@ module.exports = (robot) ->
     robot.brain.data.reminders = []
     robot.brain.emit('save', robot.brain.data.reminders)
 
-    msg.send "OK, I'll stop"
+    msg.send "OK, I'll stop reminding y'all"
 
 
   robot.respond /(stop|clear|kill|remove) reminder (\d)/i, (msg) ->
     msg.send "OK, I will remove [#{reminders.cache[parseInt(msg.match[2]) - 1].text()}]"
+
     reminders.cache.splice(parseInt(msg.match[2]) - 1, 1)
     robot.brain.data.reminders = reminders.cache
     robot.brain.emit('save', robot.brain.data.reminders)
@@ -165,6 +190,6 @@ module.exports = (robot) ->
   robot.respond /(list|show)( me)?( all)? reminders/i, (msg) ->
     response = "OK, here are the reminders \n"
     for reminder in reminders.cache
-      response += "#{reminder.text()} #{reminder.dueDate()} #{reminder.repeat} \n"
+      response += "#{reminder.text()} #{reminder.date} #{reminder.repeat} \n"
 
     msg.send response
